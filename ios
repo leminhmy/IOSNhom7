@@ -1,0 +1,139 @@
+//
+//  DatabaseAccess.swift
+//  QuanLyMonAn
+//
+//  Created by Khiem Tran on 7/26/20.
+//  Copyright © 2020 fit.tdc. All rights reserved.
+//
+
+import Foundation
+import UIKit
+import os.log
+
+class DatabaseAccess{
+    let dPath: String
+    let DB_NAME: String = "Foods.sqlite"
+    let db: FMDatabase?
+    
+    let TABLE_NAME: String = "meals"
+    let TABLE_ID:String = "_id"
+    let MEAL_NAME:String = "name"
+    let MEAL_IMAGE:String = "image"
+    let MEAL_RATING:String = "rating"
+    
+    init() {
+        let directoties:[String] = NSSearchPathForDirectoriesInDomains(.documentDirectory,.allDomainsMask, true)
+        dPath = directoties[0] + "/" + DB_NAME
+        db = FMDatabase(path: dPath)
+        if db == nil{
+            os_log("Can not create tge database. Please review the dPath!")
+        }
+        else{
+            os_log("Database is created successful!")
+        }
+    }
+    
+
+    func createTable() -> Bool{
+        var ok: Bool = false
+        if db != nil {
+            let sql = "CREATE TABLE " + TABLE_NAME +
+            "( " + TABLE_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " + MEAL_NAME + " TEXT, " + MEAL_IMAGE + " TEXT, " + MEAL_RATING + " INTEGER)"
+            
+            if db!.executeStatements(sql) {
+                ok = true
+                os_log("Table is created!")
+            }
+            else{
+                os_log("Can not create the table!")
+            }
+        }else{
+            os_log("Database is nil!")
+        }
+        return ok
+    }
+    
+    func open()->Bool{
+        var ok: Bool = false
+        
+        if db != nil {
+            if db!.open() {
+                ok = true
+                os_log("The database is opened!",log: .default,type: .debug)
+            }
+            else{
+                os_log("Can not open the Database",log: .default,type: .debug)
+            }
+        }
+        else{
+            os_log("Database is nil")
+        }
+        return ok
+    }
+    
+    func insert(meal: Meal){
+        if db != nil{
+            let imageData: NSData = meal.image!.pngData()! as NSData
+            let mealImageString = imageData.base64EncodedData(options: .lineLength64Characters)
+            let sql = "INSERT INTO " + TABLE_NAME + "(" + MEAL_NAME + ", " + MEAL_IMAGE + ", " + MEAL_RATING + ")" + "VALUES (?, ?, ?)"
+            if  db!.executeUpdate(sql, withArgumentsIn: [meal.name,mealImageString,meal.rating])
+            {
+                os_log("The meal is insert to the database!")
+            }
+            else{
+                os_log("Fail to insert the meal!")
+            }
+            
+        }else{
+            os_log("Database is nil!")
+        }
+    }
+    
+    func delete(meal: Meal) {
+        if db != nil{
+            let sql = "DELETE FROM\(TABLE_NAME) WHERE \(MEAL_NAME) = ? AND \(MEAL_RATING) = ?"
+            do{
+                try db!.executeUpdate(sql, values: [meal.name,meal.rating])
+                os_log("the meal is deleted!")
+            }catch{
+                os_log("Fail to delete the meal!")
+            }
+        }
+        else{
+            os_log("Database is nil!")
+        }
+    }
+    
+    func readMealList(meals:inout [Meal]) {
+        if db != nil {
+            var results: FMResultSet?
+            let sql = "SELECT * FROM \(TABLE_NAME)"
+            //query
+            do{
+                results = try db!.executeQuery(sql, values: nil)
+            }
+            catch{
+                print("Fail to read data: \(error.localizedDescription)")
+            }
+            //read data from the results
+            if results != nil{
+                while (results?.next())! {
+                    let mealName = results!.string(forColumn: MEAL_NAME) ?? ""
+                    let stringImage = results!.string(forColumn: MEAL_IMAGE)
+                    let mealRating = results!.int(forColumn: MEAL_RATING)
+                    
+                    //Transform string image to UIImage
+                    let dataImage: Data = Data(base64Encoded: stringImage!,options: .ignoreUnknownCharacters)!
+                    let mealImage = UIImage(data: dataImage)
+                    
+                    //Create a meal to contain the values
+                    let meal = Meal(name: mealName, image: mealImage!, rating: Int(mealRating))
+                }
+            }
+        }
+        else{
+            os_log("Database is nil!")
+        }
+    }
+}
+
